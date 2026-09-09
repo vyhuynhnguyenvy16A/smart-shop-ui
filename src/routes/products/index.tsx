@@ -8,12 +8,12 @@ import { StockBadge } from "@/components/StockBadge";
 import { CATEGORIES, formatPrice, products, type Product } from "@/lib/products";
 import { addToCart } from "@/lib/cart";
 
-type Search = { q?: string; category?: string };
+type Search = { q?: string | undefined; category?: string | undefined };
 
 export const Route = createFileRoute("/products/")({
   validateSearch: (search: Record<string, unknown>): Search => ({
-    q: typeof search.q === "string" ? search.q : undefined,
-    category: typeof search.category === "string" ? search.category : undefined,
+    q: typeof search["q"] === "string" ? (search["q"] as string) : undefined,
+    category: typeof search["category"] === "string" ? (search["category"] as string) : undefined,
   }),
   head: () => ({
     meta: [

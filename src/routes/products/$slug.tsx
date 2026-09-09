@@ -1,0 +1,165 @@
+import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { ShieldCheck, Truck, RotateCcw, ShoppingCart, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Rating } from "@/components/Rating";
+import { StockBadge } from "@/components/StockBadge";
+import { ProductCard } from "@/components/ProductCard";
+import { formatPrice, getProduct, products } from "@/lib/products";
+import { addToCart } from "@/lib/cart";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/products/$slug")({
+  loader: ({ params }) => {
+    const product = getProduct(params.slug);
+    if (!product) throw notFound();
+    return product;
+  },
+  head: ({ loaderData }) => ({
+    meta: loaderData
+      ? [
+          { title: `${loaderData.title} — Northline` },
+          { name: "description", content: loaderData.description },
+          { property: "og:title", content: loaderData.title },
+          { property: "og:description", content: loaderData.description },
+        ]
+      : [],
+  }),
+  component: ProductDetail,
+});
+
+function ProductDetail() {
+  const product = Route.useLoaderData();
+  const [active, setActive] = useState(0);
+  const gallery = [product.image, product.image, product.image, product.image];
+  const out = product.stock === "out";
+  const related = products.filter((p) => p.id !== product.id).slice(0, 4);
+
+  return (
+    <div className="pb-24 md:pb-0">
+      <div className="container-shop pt-6 text-sm text-muted-foreground">
+        <Link to="/products" search={{}} className="hover:text-foreground hover:underline">
+          Products
+        </Link>{" "}
+        / <span className="text-foreground">{product.category}</span>
+      </div>
+
+      <div className="container-shop grid gap-8 py-8 md:grid-cols-2">
+        <div>
+          <img
+            src={gallery[active]}
+            alt={product.title}
+            width={1024}
+            height={1024}
+            className="aspect-square w-full rounded-xl object-cover shadow-[var(--shadow-card)] transition-transform duration-300 hover:scale-105"
+          />
+          <div className="mt-4 flex gap-3 overflow-x-auto">
+            {gallery.map((g, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setActive(i)}
+                aria-label={`View image ${i + 1}`}
+                className={cn(
+                  "h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2",
+                  i === active ? "border-primary" : "border-border",
+                )}
+              >
+                <img src={g} alt="" width={80} height={80} loading="lazy" className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h1 className="text-2xl font-semibold leading-snug text-foreground md:text-3xl">
+            {product.title}
+          </h1>
+          <Rating value={product.rating} count={product.reviews} className="mt-3" />
+
+          <div className="mt-4 flex items-baseline gap-3">
+            <span className="text-3xl font-bold text-primary">{formatPrice(product.price)}</span>
+            {product.compareAt && (
+              <span className="text-base text-muted-foreground line-through">
+                {formatPrice(product.compareAt)}
+              </span>
+            )}
+          </div>
+          <StockBadge stock={product.stock} className="mt-3" />
+
+          <p className="mt-6 text-base text-muted-foreground">{product.description}</p>
+
+          <div className="mt-6 hidden md:block">
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full"
+              disabled={out}
+              onClick={() => addToCart(product.id)}
+            >
+              <ShoppingCart /> {out ? "Out of Stock" : "Add to Cart"}
+            </Button>
+          </div>
+
+          <ul className="mt-6 grid gap-3 rounded-xl bg-card p-4 text-sm text-foreground">
+            <li className="flex items-center gap-3">
+              <Truck className="h-5 w-5 text-success" /> Free Shipping Over $50
+            </li>
+            <li className="flex items-center gap-3">
+              <RotateCcw className="h-5 w-5 text-success" /> 30-Day Free Returns
+            </li>
+            <li className="flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 text-success" /> Secure SSL payment
+            </li>
+          </ul>
+
+          <ul className="mt-6 grid gap-2 text-sm text-muted-foreground">
+            {["Verified Buyer reviews", "Ships in 24 hours", "2-year warranty"].map((f) => (
+              <li key={f} className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-success" /> {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <section className="container-shop section-y pt-0">
+        <h2 className="text-2xl font-semibold text-foreground">Customer reviews</h2>
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
+          {[
+            { n: "Mai T.", t: "Exactly as pictured, arrived in two days." },
+            { n: "David L.", t: "Great build quality for the price. Would buy again." },
+            { n: "Sara K.", t: "Returns were painless when I sized wrong the first time." },
+          ].map((r) => (
+            <blockquote key={r.n} className="rounded-xl bg-card p-4">
+              <Rating value={5} count={1} className="mb-2" />
+              <p className="text-base text-foreground">{r.t}</p>
+              <footer className="mt-2 text-sm text-success">{r.n} · Verified Buyer</footer>
+            </blockquote>
+          ))}
+        </div>
+      </section>
+
+      <section className="container-shop section-y pt-0">
+        <h2 className="text-2xl font-semibold text-foreground">You may also like</h2>
+        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {related.map((p) => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </div>
+      </section>
+
+      <div className="fixed inset-x-0 bottom-14 z-30 border-t border-border bg-background p-4 md:hidden">
+        <Button
+          variant="primary"
+          size="md"
+          className="w-full"
+          disabled={out}
+          onClick={() => addToCart(product.id)}
+        >
+          <ShoppingCart /> {out ? "Out of Stock" : `Add to Cart · ${formatPrice(product.price)}`}
+        </Button>
+      </div>
+    </div>
+  );
+}
