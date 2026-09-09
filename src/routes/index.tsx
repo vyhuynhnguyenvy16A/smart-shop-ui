@@ -1,24 +1,131 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Star, Truck, ShieldCheck, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ProductCard } from "@/components/ProductCard";
+import { CATEGORIES, products } from "@/lib/products";
+import hero from "@/assets/p-headphones.jpg";
+import sneakers from "@/assets/p-sneakers.jpg";
+import backpack from "@/assets/p-backpack.jpg";
+import watch from "@/assets/p-watch.jpg";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "Northline — Everyday Gear, Free Shipping Over $50" },
+      {
+        name: "description",
+        content:
+          "Shop audio, footwear, bags and watches at Northline. Free shipping over $50, 30-day free returns and secure guest checkout.",
+      },
+      { property: "og:title", content: "Northline — Everyday Gear" },
+      {
+        property: "og:description",
+        content: "Curated audio, footwear, bags and watches with free shipping over $50.",
+      },
+    ],
+  }),
+  component: Home,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+const categoryImages: Record<string, string> = {
+  Audio: hero,
+  Footwear: sneakers,
+  Bags: backpack,
+  Watches: watch,
+};
+
+function Home() {
+  const featured = products.slice(0, 4);
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <>
+      <section className="border-b border-border bg-card">
+        <div className="container-shop grid items-center gap-8 py-12 md:grid-cols-2 md:py-16">
+          <div>
+            <p className="mb-4 inline-flex items-center gap-2 rounded-md bg-success/10 px-2 py-1 text-sm font-semibold text-success">
+              <Star className="h-4 w-4 fill-success" /> 4.8/5 from 12,400+ customers
+            </p>
+            <h1 className="text-4xl font-bold leading-tight tracking-tight text-foreground md:text-5xl">
+              Gear that earns its place in your day
+            </h1>
+            <p className="mt-4 max-w-md text-base text-muted-foreground">
+              Tested essentials, honest prices, free shipping over $50 and 30-day free returns.
+            </p>
+            <div className="mt-8">
+              <Button
+                variant="primary"
+                size="md"
+                asChild
+                className="w-full sm:w-auto"
+              >
+                <Link to="/products" search={{}}>
+                  Shop best sellers
+                </Link>
+              </Button>
+            </div>
+            <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+              <li className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-success" /> Free shipping over $50
+              </li>
+              <li className="flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-success" /> 30-day returns
+              </li>
+              <li className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-success" /> Secure payment
+              </li>
+            </ul>
+          </div>
+          <img
+            src={hero}
+            alt="Studio wireless noise-cancelling headphones"
+            width={1024}
+            height={1024}
+            className="mx-auto w-full max-w-md rounded-xl object-cover shadow-[var(--shadow-card)]"
+          />
+        </div>
+      </section>
+
+      <section className="container-shop section-y">
+        <h2 className="text-2xl font-semibold text-foreground">Shop by category</h2>
+        <div className="mt-6 grid grid-cols-2 gap-6 md:grid-cols-4">
+          {CATEGORIES.slice(0, 4).map((c) => (
+            <Link
+              key={c}
+              to="/products"
+              search={{ category: c }}
+              className="group overflow-hidden rounded-xl bg-card shadow-[var(--shadow-card)] transition-transform hover:scale-[1.02]"
+            >
+              <img
+                src={categoryImages[c]}
+                alt={c}
+                width={1024}
+                height={1024}
+                loading="lazy"
+                className="aspect-square w-full object-cover"
+              />
+              <span className="block p-4 text-base font-semibold text-foreground group-hover:text-primary">
+                {c}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="container-shop section-y pt-0">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h2 className="text-2xl font-semibold text-foreground">Featured this week</h2>
+          <Button variant="tertiary" size="sm" asChild>
+            <Link to="/products" search={{}}>
+              View all products
+            </Link>
+          </Button>
+        </div>
+        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {featured.map((p) => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
