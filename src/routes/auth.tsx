@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AlertCircle, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { apiFetch, saveAuthTokens, type AuthResponse, type UserResponse } from "@/lib/api-client";
+import { getApiErrorMessage, loginUser, registerUser, saveAuthTokens } from "@/lib/api-client";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -11,7 +11,8 @@ export const Route = createFileRoute("/auth")({
       { title: "Sign in or create an account — Northline" },
       {
         name: "description",
-        content: "Sign in to track Northline orders, or create an account in seconds. Guest checkout is always available.",
+        content:
+          "Sign in to track Northline orders, or create an account in seconds. Guest checkout is always available.",
       },
       { property: "og:title", content: "Sign in — Northline" },
       { property: "og:description", content: "Sign in or create your Northline account." },
@@ -25,6 +26,7 @@ function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [attempts, setAttempts] = useState(0);
@@ -45,9 +47,11 @@ function AuthPage() {
     setError("");
     try {
       if (mode === "signup") {
-        await apiFetch<UserResponse>("/api/auth/register", {
-          method: "POST",
-          body: JSON.stringify({ email: email.trim(), fullName: fullName.trim(), password }),
+        await registerUser({
+          email: email.trim(),
+          fullName: fullName.trim(),
+          password,
+          phone: phone.trim(),
         });
         setMode("signin");
         setPassword("");
@@ -56,10 +60,7 @@ function AuthPage() {
         return;
       }
 
-      const auth = await apiFetch<AuthResponse>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email: email.trim(), password }),
-      });
+      const auth = await loginUser({ email: email.trim(), password });
       saveAuthTokens(auth);
       setAttempts(0);
       navigate({ to: "/account" });
@@ -69,7 +70,7 @@ function AuthPage() {
       setError(
         next >= 5
           ? "Too many failed attempts. Your account is temporarily locked. Try again in 15 minutes."
-          : `${reason instanceof Error ? reason.message : "Authentication failed."} ${5 - next} attempts left before a temporary lock.`,
+          : `${getApiErrorMessage(reason, "Authentication failed.")} ${5 - next} attempts left before a temporary lock.`,
       );
     } finally {
       setSubmitting(false);
@@ -127,7 +128,25 @@ function AuthPage() {
           </div>
           {mode === "signup" && (
             <div>
-              <label htmlFor="fullName" className="mb-1 block text-sm font-semibold text-foreground">
+              <label htmlFor="phone" className="mb-1 block text-sm font-semibold text-foreground">
+                Phone
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+                className="h-12 w-full rounded-lg border border-input bg-background px-4 text-base outline-none focus:border-primary"
+              />
+            </div>
+          )}
+          {mode === "signup" && (
+            <div>
+              <label
+                htmlFor="fullName"
+                className="mb-1 block text-sm font-semibold text-foreground"
+              >
                 Full name
               </label>
               <input

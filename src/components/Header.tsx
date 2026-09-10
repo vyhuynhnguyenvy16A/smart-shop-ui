@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Menu, Search, ShoppingCart, Shield, User, X } from "lucide-react";
-import { CATEGORIES, products } from "@/lib/products";
+import { CATEGORIES, getProducts, type Product } from "@/lib/products";
 import { cartTotals, detailedCart, useCart } from "@/lib/cart";
 import { Button } from "@/components/ui/button";
 
@@ -12,10 +12,26 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  const suggestions = useMemo(() => {
+  const [suggestions, setSuggestions] = useState<Product[]>([]);
+
+  useEffect(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return products.filter((p) => p.title.toLowerCase().includes(q)).slice(0, 5);
+    if (!q) {
+      setSuggestions([]);
+      return;
+    }
+    let active = true;
+    void getProducts({ page: 0, size: 20 })
+      .then((items) => {
+        if (active)
+          setSuggestions(items.filter((item) => item.title.toLowerCase().includes(q)).slice(0, 5));
+      })
+      .catch(() => {
+        if (active) setSuggestions([]);
+      });
+    return () => {
+      active = false;
+    };
   }, [query]);
 
   return (
@@ -79,7 +95,14 @@ export function Header() {
                     onClick={() => setQuery("")}
                     className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-card"
                   >
-                    <img src={s.image} alt="" width={40} height={40} loading="lazy" className="h-10 w-10 rounded-md object-cover" />
+                    <img
+                      src={s.image}
+                      alt=""
+                      width={40}
+                      height={40}
+                      loading="lazy"
+                      className="h-10 w-10 rounded-md object-cover"
+                    />
                     <span className="line-clamp-2-title">{s.title}</span>
                   </Link>
                 </li>

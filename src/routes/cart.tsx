@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Minus, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cartTotals, detailedCart, removeFromCart, setQty, useCart } from "@/lib/cart";
 import { FREE_SHIPPING_THRESHOLD, formatPrice } from "@/lib/products";
-import { hasAccessToken } from "@/lib/api-client";
+import { getApiErrorMessage, hasAccessToken } from "@/lib/api-client";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
@@ -12,10 +12,14 @@ export const Route = createFileRoute("/cart")({
       { title: "Your Cart — Northline" },
       {
         name: "description",
-        content: "Review your Northline cart, adjust quantities and check out as a guest in three steps.",
+        content:
+          "Review your Northline cart, adjust quantities and check out as a guest in three steps.",
       },
       { property: "og:title", content: "Your Cart — Northline" },
-      { property: "og:description", content: "Review items and check out as a guest in three steps." },
+      {
+        property: "og:description",
+        content: "Review items and check out as a guest in three steps.",
+      },
     ],
   }),
   component: CartPage,
@@ -23,6 +27,7 @@ export const Route = createFileRoute("/cart")({
 
 function CartPage() {
   const navigate = useNavigate();
+  const [error, setError] = useState("");
   useEffect(() => {
     if (!hasAccessToken()) navigate({ to: "/auth" });
   }, [navigate]);
@@ -38,6 +43,11 @@ function CartPage() {
         <span className="font-semibold text-primary">Step 1 of 3</span> · Cart
       </div>
       <h1 className="text-3xl font-bold tracking-tight text-foreground">Your cart</h1>
+      {error && (
+        <p className="mt-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive">
+          {error}
+        </p>
+      )}
 
       {items.length === 0 ? (
         <div className="mt-8 rounded-xl bg-card p-8 text-center">
@@ -51,8 +61,8 @@ function CartPage() {
       ) : (
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
           <div className="space-y-4">
-            {items.map(({ product, qty }) => (
-              <div key={product.id} className="flex gap-4 rounded-xl bg-card p-4">
+            {items.map(({ product, qty, itemId }) => (
+              <div key={itemId} className="flex gap-4 rounded-xl bg-card p-4">
                 <img
                   src={product.image}
                   alt={product.title}
@@ -69,12 +79,18 @@ function CartPage() {
                   >
                     {product.title}
                   </Link>
-                  <p className="mt-1 text-xl font-bold text-primary">{formatPrice(product.price)}</p>
+                  <p className="mt-1 text-xl font-bold text-primary">
+                    {formatPrice(product.price)}
+                  </p>
                   <div className="mt-3 flex items-center gap-3">
                     <div className="flex items-center rounded-lg border border-input">
                       <button
                         type="button"
-                        onClick={() => setQty(product.id, qty - 1)}
+                        onClick={() =>
+                          void setQty(itemId, qty - 1).catch((reason) =>
+                            setError(getApiErrorMessage(reason)),
+                          )
+                        }
                         aria-label="Decrease quantity"
                         className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground"
                       >
@@ -83,7 +99,11 @@ function CartPage() {
                       <span className="w-8 text-center text-base font-semibold">{qty}</span>
                       <button
                         type="button"
-                        onClick={() => setQty(product.id, qty + 1)}
+                        onClick={() =>
+                          void setQty(itemId, qty + 1).catch((reason) =>
+                            setError(getApiErrorMessage(reason)),
+                          )
+                        }
                         aria-label="Increase quantity"
                         className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground"
                       >
@@ -92,7 +112,11 @@ function CartPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeFromCart(product.id)}
+                      onClick={() =>
+                        void removeFromCart(itemId).catch((reason) =>
+                          setError(getApiErrorMessage(reason)),
+                        )
+                      }
                       className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" /> Remove
@@ -111,7 +135,10 @@ function CartPage() {
                   : "You've unlocked free shipping"}
               </p>
               <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-border">
-                <div className="h-full bg-success transition-all" style={{ width: `${progress}%` }} />
+                <div
+                  className="h-full bg-success transition-all"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </div>
 
@@ -122,11 +149,15 @@ function CartPage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Shipping</dt>
-                <dd className="font-semibold text-success">{remaining > 0 ? formatPrice(5) : "Free"}</dd>
+                <dd className="font-semibold text-success">
+                  {remaining > 0 ? formatPrice(5) : "Free"}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Estimated tax</dt>
-                <dd className="font-semibold text-foreground">{formatPrice(Math.round(subtotal * 0.08))}</dd>
+                <dd className="font-semibold text-foreground">
+                  {formatPrice(Math.round(subtotal * 0.08))}
+                </dd>
               </div>
               <div className="flex justify-between border-t border-border pt-3 text-base">
                 <dt className="font-semibold text-foreground">Total</dt>

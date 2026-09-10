@@ -5,23 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Rating } from "@/components/Rating";
 import { StockBadge } from "@/components/StockBadge";
 import { ProductCard } from "@/components/ProductCard";
-import { formatPrice, getProduct, products } from "@/lib/products";
+import { formatPrice, getProductBySlug, getProducts } from "@/lib/products";
 import { addToCart } from "@/lib/cart";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/products/$slug")({
-  loader: ({ params }) => {
-    const product = getProduct(params.slug);
+  loader: async ({ params }) => {
+    const product = await getProductBySlug(params.slug);
     if (!product) throw notFound();
-    return product;
+    const related = (await getProducts({ size: 4, categoryId: product.categoryId })).filter(
+      (item) => item.id !== product.id,
+    );
+    return { product, related };
   },
   head: ({ loaderData }) => ({
     meta: loaderData
       ? [
-          { title: `${loaderData.title} — Northline` },
-          { name: "description", content: loaderData.description },
-          { property: "og:title", content: loaderData.title },
-          { property: "og:description", content: loaderData.description },
+          { title: `${loaderData.product.title} — Northline` },
+          { name: "description", content: loaderData.product.description },
+          { property: "og:title", content: loaderData.product.title },
+          { property: "og:description", content: loaderData.product.description },
         ]
       : [],
   }),
@@ -34,9 +37,15 @@ function ProductDetail() {
   const [color, setColor] = useState("Black");
   const [size, setSize] = useState("Standard");
   const navigate = useNavigate();
-  const gallery = [product.image, product.image, product.image, product.image];
-  const out = product.stock === "out";
-  const related = products.filter((p) => p.id !== product.id).slice(0, 4);
+  const { related } = product;
+  const currentProduct = product.product;
+  const gallery = [
+    currentProduct.image,
+    currentProduct.image,
+    currentProduct.image,
+    currentProduct.image,
+  ];
+  const out = currentProduct.stock === "out";
 
   return (
     <div className="pb-24 md:pb-0">
@@ -44,14 +53,14 @@ function ProductDetail() {
         <Link to="/products" search={{}} className="hover:text-foreground hover:underline">
           Products
         </Link>{" "}
-        / <span className="text-foreground">{product.category}</span>
+        / <span className="text-foreground">{currentProduct.category}</span>
       </div>
 
       <div className="container-shop grid gap-8 py-8 md:grid-cols-2">
         <div>
           <img
             src={gallery[active]}
-            alt={product.title}
+            alt={currentProduct.title}
             width={1024}
             height={1024}
             className="aspect-square w-full rounded-xl object-cover shadow-[var(--shadow-card)] transition-transform duration-300 hover:scale-105"
@@ -68,7 +77,14 @@ function ProductDetail() {
                   i === active ? "border-primary" : "border-border",
                 )}
               >
-                <img src={g} alt="" width={80} height={80} loading="lazy" className="h-full w-full object-cover" />
+                <img
+                  src={g}
+                  alt=""
+                  width={80}
+                  height={80}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
               </button>
             ))}
           </div>
@@ -76,21 +92,23 @@ function ProductDetail() {
 
         <div>
           <h1 className="text-2xl font-semibold leading-snug text-foreground md:text-3xl">
-            {product.title}
+            {currentProduct.title}
           </h1>
-          <Rating value={product.rating} count={product.reviews} className="mt-3" />
+          <Rating value={currentProduct.rating} count={currentProduct.reviews} className="mt-3" />
 
           <div className="mt-4 flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-primary">{formatPrice(product.price)}</span>
-            {product.compareAt && (
+            <span className="text-3xl font-bold text-primary">
+              {formatPrice(currentProduct.price)}
+            </span>
+            {currentProduct.compareAt && (
               <span className="text-base text-muted-foreground line-through">
-                {formatPrice(product.compareAt)}
+                {formatPrice(currentProduct.compareAt)}
               </span>
             )}
           </div>
-          <StockBadge stock={product.stock} className="mt-3" />
+          <StockBadge stock={currentProduct.stock} className="mt-3" />
 
-          <p className="mt-6 text-base text-muted-foreground">{product.description}</p>
+          <p className="mt-6 text-base text-muted-foreground">{currentProduct.description}</p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-semibold text-foreground">
@@ -122,7 +140,13 @@ function ProductDetail() {
           </div>
 
           <div className="mt-6 hidden gap-3 md:flex">
-            <Button variant="secondary" size="md" className="flex-1" disabled={out} onClick={() => addToCart(product.id)}>
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              disabled={out}
+              onClick={() => void addToCart(currentProduct.id)}
+            >
               <ShoppingCart /> {out ? "Out of Stock" : "Add to Cart"}
             </Button>
             <Button
@@ -131,7 +155,7 @@ function ProductDetail() {
               className="flex-1"
               disabled={out}
               onClick={() => {
-                addToCart(product.id);
+                void addToCart(currentProduct.id);
                 navigate({ to: "/checkout" });
               }}
             >
@@ -189,7 +213,13 @@ function ProductDetail() {
 
       <div className="fixed inset-x-0 bottom-14 z-30 border-t border-border bg-background p-4 md:hidden">
         <div className="flex gap-3">
-          <Button variant="secondary" size="md" className="flex-1" disabled={out} onClick={() => addToCart(product.id)}>
+          <Button
+            variant="secondary"
+            size="md"
+            className="flex-1"
+            disabled={out}
+            onClick={() => void addToCart(currentProduct.id)}
+          >
             <ShoppingCart /> Add
           </Button>
           <Button
@@ -198,11 +228,11 @@ function ProductDetail() {
             className="flex-1"
             disabled={out}
             onClick={() => {
-              addToCart(product.id);
+              void addToCart(currentProduct.id);
               navigate({ to: "/checkout" });
             }}
           >
-            Mua ngay · {formatPrice(product.price)}
+            Mua ngay · {formatPrice(currentProduct.price)}
           </Button>
         </div>
       </div>
