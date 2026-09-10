@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Menu, Search, ShoppingCart, X } from "lucide-react";
+import { Menu, Search, ShoppingCart, Shield, User, X } from "lucide-react";
 import { CATEGORIES, products } from "@/lib/products";
 import { cartTotals, detailedCart, useCart } from "@/lib/cart";
 import { Button } from "@/components/ui/button";
@@ -99,6 +99,20 @@ export function Header() {
               {count}
             </span>
           )}
+        </Link>
+        <Link
+          to="/auth"
+          aria-label="Account"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-foreground hover:bg-card"
+        >
+          <User className="h-6 w-6" />
+        </Link>
+        <Link
+          to="/admin/orders"
+          aria-label="Admin"
+          className="hidden h-11 w-11 items-center justify-center rounded-lg text-foreground hover:bg-card sm:flex"
+        >
+          <Shield className="h-5 w-5" />
         </Link>
       </div>
 

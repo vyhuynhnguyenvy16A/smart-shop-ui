@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { SlidersHorizontal, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
 import { Rating } from "@/components/Rating";
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/products/")({
 });
 
 const SORTS = ["Best Selling", "Price: Low-High", "Newest"] as const;
+const PAGE_SIZE = 6;
 
 function ProductListing() {
   const { q, category } = Route.useSearch();
@@ -44,6 +45,7 @@ function ProductListing() {
   const [sort, setSort] = useState<(typeof SORTS)[number]>("Best Selling");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [quick, setQuick] = useState<Product | null>(null);
+  const [page, setPage] = useState(1);
 
   const list = useMemo(() => {
     let out = products.filter(
@@ -59,6 +61,10 @@ function ProductListing() {
     if (sort === "Best Selling") out = [...out].sort((a, b) => b.reviews - a.reviews);
     return out;
   }, [maxPrice, minRating, inStockOnly, cats, q, sort]);
+
+  const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const paginated = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const toggleCat = (c: string) =>
     setCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -163,7 +169,7 @@ function ProductListing() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            {list.map((p) => (
+            {paginated.map((p) => (
               <ProductCard key={p.id} product={p} onQuickView={setQuick} />
             ))}
           </div>
@@ -171,6 +177,31 @@ function ProductListing() {
             <p className="rounded-xl bg-card p-8 text-center text-base text-muted-foreground">
               No products match these filters.
             </p>
+          )}
+          {list.length > PAGE_SIZE && (
+            <nav aria-label="Product pages" className="mt-8 flex items-center justify-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Previous page"
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="text-sm font-semibold text-foreground">
+                Page {currentPage} of {pageCount}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Next page"
+                disabled={currentPage === pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              >
+                <ChevronRight />
+              </Button>
+            </nav>
           )}
         </div>
       </div>

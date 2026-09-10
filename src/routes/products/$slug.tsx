@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ShieldCheck, Truck, RotateCcw, ShoppingCart, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,9 @@ export const Route = createFileRoute("/products/$slug")({
 function ProductDetail() {
   const product = Route.useLoaderData();
   const [active, setActive] = useState(0);
+  const [color, setColor] = useState("Black");
+  const [size, setSize] = useState("Standard");
+  const navigate = useNavigate();
   const gallery = [product.image, product.image, product.image, product.image];
   const out = product.stock === "out";
   const related = products.filter((p) => p.id !== product.id).slice(0, 4);
@@ -89,15 +92,50 @@ function ProductDetail() {
 
           <p className="mt-6 text-base text-muted-foreground">{product.description}</p>
 
-          <div className="mt-6 hidden md:block">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-semibold text-foreground">
+              Color
+              <select
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="mt-2 h-12 w-full rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus:border-primary"
+              >
+                <option>Black</option>
+                <option>White</option>
+                <option>Olive</option>
+                <option>Silver</option>
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-foreground">
+              Size
+              <select
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                className="mt-2 h-12 w-full rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus:border-primary"
+              >
+                <option>Standard</option>
+                <option>Small</option>
+                <option>Medium</option>
+                <option>Large</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-6 hidden gap-3 md:flex">
+            <Button variant="secondary" size="md" className="flex-1" disabled={out} onClick={() => addToCart(product.id)}>
+              <ShoppingCart /> {out ? "Out of Stock" : "Add to Cart"}
+            </Button>
             <Button
               variant="primary"
               size="md"
-              className="w-full"
+              className="flex-1"
               disabled={out}
-              onClick={() => addToCart(product.id)}
+              onClick={() => {
+                addToCart(product.id);
+                navigate({ to: "/checkout" });
+              }}
             >
-              <ShoppingCart /> {out ? "Out of Stock" : "Add to Cart"}
+              Mua ngay
             </Button>
           </div>
 
@@ -150,15 +188,23 @@ function ProductDetail() {
       </section>
 
       <div className="fixed inset-x-0 bottom-14 z-30 border-t border-border bg-background p-4 md:hidden">
-        <Button
-          variant="primary"
-          size="md"
-          className="w-full"
-          disabled={out}
-          onClick={() => addToCart(product.id)}
-        >
-          <ShoppingCart /> {out ? "Out of Stock" : `Add to Cart · ${formatPrice(product.price)}`}
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="secondary" size="md" className="flex-1" disabled={out} onClick={() => addToCart(product.id)}>
+            <ShoppingCart /> Add
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            className="flex-1"
+            disabled={out}
+            onClick={() => {
+              addToCart(product.id);
+              navigate({ to: "/checkout" });
+            }}
+          >
+            Mua ngay · {formatPrice(product.price)}
+          </Button>
+        </div>
       </div>
     </div>
   );

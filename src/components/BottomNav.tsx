@@ -31,9 +31,9 @@ export function BottomNav() {
         </span>
         Cart
       </Link>
-      <Link to="/checkout" className={item}>
+      <Link to="/auth" className={item}>
         <User className="h-5 w-5" />
-        Checkout
+        Account
       </Link>
     </nav>
   );
