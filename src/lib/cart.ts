@@ -1,44 +1,59 @@
 import { useSyncExternalStore } from "react";
-import { products, type Product } from "./products";
+import {
+  addCartItem,
+  deleteCartItem,
+  getCart,
+  updateCartItem,
+  type CartItemResponse,
+  type CartResponse,
+} from "./api-client";
+import type { Product } from "./products";
 
-export type CartLine = { id: string; qty: number };
+export type CartLine = {
+  id: string;
+  qty: number;
+  itemId: number;
+  variantId: number;
+  item: CartItemResponse;
+};
 
-const KEY = "shop-cart-v1";
 let lines: CartLine[] = [];
-let hydrated = false;
+let loaded = false;
+let loading = false;
 const listeners = new Set<() => void>();
+const EMPTY: CartLine[] = [];
 
 function emit() {
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => listener());
 }
 
-function persist() {
+function applyCart(cart: CartResponse) {
+  lines = cart.items.map((item) => ({
+    id: String(item.id),
+    qty: item.quantity,
+    itemId: item.id,
+    variantId: item.variantId,
+    item,
+  }));
+  loaded = true;
+  emit();
+}
+
+async function loadCart() {
+  if (loading || loaded || typeof window === "undefined") return;
+  loading = true;
   try {
-    localStorage.setItem(KEY, JSON.stringify(lines));
-  } catch {
-    /* ignore */
+    applyCart(await getCart());
+  } finally {
+    loading = false;
   }
 }
 
-function hydrate() {
-  if (hydrated || typeof window === "undefined") return;
-  hydrated = true;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) lines = JSON.parse(raw) as CartLine[];
-  } catch {
-    /* ignore */
-  }
+function subscribe(callback: () => void) {
+  listeners.add(callback);
+  void loadCart();
+  return () => listeners.delete(callback);
 }
-
-function subscribe(cb: () => void) {
-  hydrate();
-  listeners.add(cb);
-  cb();
-  return () => listeners.delete(cb);
-}
-
-const EMPTY: CartLine[] = [];
 
 export function useCart() {
   return useSyncExternalStore(
@@ -48,45 +63,74 @@ export function useCart() {
   );
 }
 
-export function addToCart(id: string, qty = 1) {
-  hydrate();
-  const existing = lines.find((l) => l.id === id);
-  lines = existing
-    ? lines.map((l) => (l.id === id ? { ...l, qty: l.qty + qty } : l))
-    : [...lines, { id, qty }];
-  persist();
-  emit();
+export async function addToCart(variantId: string | number, qty = 1) {
+  applyCart(await addCartItem(Number(variantId), qty));
 }
 
-export function setQty(id: string, qty: number) {
-  lines = qty <= 0 ? lines.filter((l) => l.id !== id) : lines.map((l) => (l.id === id ? { ...l, qty } : l));
-  persist();
-  emit();
+export async function setQty(itemId: string | number, qty: number) {
+  if (qty <= 0) {
+    await removeFromCart(itemId);
+    return;
+  }
+  applyCart(await updateCartItem(Number(itemId), qty));
 }
 
-export function removeFromCart(id: string) {
-  setQty(id, 0);
+export async function removeFromCart(itemId: string | number) {
+  await deleteCartItem(Number(itemId));
+  if (loaded) {
+    lines = lines.filter((line) => line.itemId !== Number(itemId));
+    emit();
+  }
 }
 
-export function clearCart() {
+export async function clearCart() {
+  await Promise.all(lines.map((line) => deleteCartItem(line.itemId)));
   lines = [];
-  persist();
+  loaded = true;
   emit();
 }
 
-export type CartItem = { product: Product; qty: number };
+function productFromCart(item: CartItemResponse): Product {
+  return {
+    id: item.variantId,
+    name: item.productName,
+    slug: String(item.variantId),
+    description: "",
+    basePrice: item.unitPrice,
+    status: "ACTIVE",
+    categoryId: 0,
+    categoryName: "",
+    createdAt: "",
+    title: item.productName,
+    price: item.unitPrice,
+    rating: 0,
+    reviews: 0,
+    image: "",
+    category: "",
+    stock: "in",
+  };
+}
+
+export type CartItem = {
+  product: Product;
+  qty: number;
+  itemId: number;
+  variantId: number;
+  item: CartItemResponse;
+};
 
 export function detailedCart(cart: CartLine[]): CartItem[] {
-  return cart
-    .map((l) => {
-      const product = products.find((p) => p.id === l.id);
-      return product ? { product, qty: l.qty } : null;
-    })
-    .filter(Boolean) as CartItem[];
+  return cart.map((line) => ({
+    product: productFromCart(line.item),
+    qty: line.qty,
+    itemId: line.itemId,
+    variantId: line.variantId,
+    item: line.item,
+  }));
 }
 
 export function cartTotals(items: CartItem[]) {
-  const subtotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
-  const count = items.reduce((s, i) => s + i.qty, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.item.subtotal, 0);
+  const count = items.reduce((sum, item) => sum + item.qty, 0);
   return { subtotal, count };
 }

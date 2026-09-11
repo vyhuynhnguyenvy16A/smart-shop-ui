@@ -2,10 +2,11 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Package, User, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ORDERS, STATUS_LABEL, StatusBadgeClass } from "@/lib/orders";
+import { STATUS_LABEL, StatusBadgeClass, type Order } from "@/lib/orders";
 import { formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
-import { hasAccessToken } from "@/lib/api-client";
+import { getCurrentUser, getApiErrorMessage, hasAccessToken } from "@/lib/api-client";
+import { getOrderPage } from "@/lib/orders";
 
 export const Route = createFileRoute("/account")({
   head: () => ({
@@ -13,10 +14,14 @@ export const Route = createFileRoute("/account")({
       { title: "Your account & orders — Northline" },
       {
         name: "description",
-        content: "See your Northline order history with live status labels, plus your profile and saved address.",
+        content:
+          "See your Northline order history with live status labels, plus your profile and saved address.",
       },
       { property: "og:title", content: "Your account — Northline" },
-      { property: "og:description", content: "Order history, profile details and saved addresses." },
+      {
+        property: "og:description",
+        content: "Order history, profile details and saved addresses.",
+      },
     ],
   }),
   component: AccountPage,
@@ -27,15 +32,34 @@ const TABS = ["Orders", "Profile", "Addresses"] as const;
 function AccountPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Orders");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [profile, setProfile] = useState({ fullName: "", email: "", phone: "" });
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!hasAccessToken()) navigate({ to: "/auth" });
+    else {
+      void Promise.all([getCurrentUser(), getOrderPage()])
+        .then(([user, page]) => {
+          setProfile({ fullName: user.fullName, email: user.email, phone: user.phone });
+          setOrders(page.content);
+        })
+        .catch((reason) => setError(getApiErrorMessage(reason, "Unable to load your account.")));
+    }
   }, [navigate]);
 
   return (
     <div className="container-shop section-y pb-24 md:pb-12">
-      <h1 className="text-3xl font-bold tracking-tight text-foreground">Hello, Mai</h1>
-      <p className="mt-2 text-sm text-muted-foreground">mai@example.com</p>
+      <h1 className="text-3xl font-bold tracking-tight text-foreground">
+        Hello, {profile.fullName || "there"}
+      </h1>
+      <p className="mt-2 text-sm text-muted-foreground">{profile.email}</p>
+
+      {error && (
+        <p className="mt-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive">
+          {error}
+        </p>
+      )}
 
       <div className="mt-8 flex gap-2 border-b border-border" role="tablist">
         {TABS.map((t) => (
@@ -58,7 +82,7 @@ function AccountPage() {
 
       {tab === "Orders" && (
         <div className="mt-6 grid gap-4">
-          {ORDERS.map((o) => (
+          {orders.map((o) => (
             <article key={o.id} className="rounded-xl bg-card p-5">
               <div className="flex flex-wrap items-center gap-3">
                 <Package className="h-5 w-5 text-muted-foreground" />
@@ -96,12 +120,14 @@ function AccountPage() {
           </div>
           <div className="mt-4 grid gap-4">
             {[
-              { label: "Full name", value: "Mai Tran" },
-              { label: "Email", value: "mai@example.com" },
-              { label: "Phone", value: "+84 900 000 000" },
+              { label: "Full name", value: profile.fullName },
+              { label: "Email", value: profile.email },
+              { label: "Phone", value: profile.phone },
             ].map((f) => (
               <div key={f.label}>
-                <label className="mb-1 block text-sm font-semibold text-foreground">{f.label}</label>
+                <label className="mb-1 block text-sm font-semibold text-foreground">
+                  {f.label}
+                </label>
                 <input
                   defaultValue={f.value}
                   className="h-12 w-full rounded-lg border border-input bg-background px-4 text-base outline-none focus:border-primary"

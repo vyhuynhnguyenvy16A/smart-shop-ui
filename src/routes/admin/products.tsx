@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { AdminNav } from "@/components/AdminNav";
 import { Button } from "@/components/ui/button";
-import { CATEGORIES, formatPrice, products as SEED } from "@/lib/products";
+import { CATEGORIES, formatPrice, getProducts } from "@/lib/products";
 
 export const Route = createFileRoute("/admin/products")({
   head: () => ({
@@ -11,10 +11,14 @@ export const Route = createFileRoute("/admin/products")({
       { title: "Product management — Northline Admin" },
       {
         name: "description",
-        content: "Create, edit and delete Northline products, including variants and per-variant stock levels.",
+        content:
+          "Create, edit and delete Northline products, including variants and per-variant stock levels.",
       },
       { property: "og:title", content: "Product management — Northline Admin" },
-      { property: "og:description", content: "CRUD products with variants and inventory tracking." },
+      {
+        property: "og:description",
+        content: "CRUD products with variants and inventory tracking.",
+      },
     ],
   }),
   component: AdminProducts,
@@ -30,19 +34,8 @@ type Row = {
   variants: Variant[];
 };
 
-const initialRows: Row[] = SEED.map((p) => ({
-  id: p.id,
-  title: p.title,
-  category: p.category,
-  price: p.price,
-  image: p.image,
-  variants: [
-    { name: "Default", stock: p.stock === "out" ? 0 : p.stock === "low" ? 4 : 42 },
-  ],
-}));
-
 function AdminProducts() {
-  const [rows, setRows] = useState<Row[]>(initialRows);
+  const [rows, setRows] = useState<Row[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
 
@@ -51,7 +44,22 @@ function AdminProducts() {
   const [price, setPrice] = useState("");
   const [variants, setVariants] = useState<Variant[]>([{ name: "", stock: 0 }]);
   const [error, setError] = useState("");
-  const defaultImage = SEED[0]?.image ?? "";
+  const defaultImage = rows[0]?.image ?? "";
+
+  useEffect(() => {
+    void getProducts({ page: 0, size: 100 }).then((items) => {
+      setRows(
+        items.map((p) => ({
+          id: String(p.id),
+          title: p.title,
+          category: p.category,
+          price: p.price,
+          image: p.image,
+          variants: [{ name: "Variant data unavailable", stock: p.stock === "out" ? 0 : 0 }],
+        })),
+      );
+    });
+  }, []);
 
   function openNew() {
     setEditing(null);
@@ -87,7 +95,9 @@ function AdminProducts() {
       image: editing?.image ?? defaultImage,
       variants: cleaned,
     };
-    setRows((prev) => (editing ? prev.map((r) => (r.id === editing.id ? next : r)) : [next, ...prev]));
+    setRows((prev) =>
+      editing ? prev.map((r) => (r.id === editing.id ? next : r)) : [next, ...prev],
+    );
     setOpen(false);
   }
 
@@ -120,7 +130,13 @@ function AdminProducts() {
               <tr key={r.id} className="border-b border-border last:border-0">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <img src={r.image} alt="" width={40} height={40} className="h-10 w-10 rounded-md object-cover" />
+                    <img
+                      src={r.image}
+                      alt=""
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 rounded-md object-cover"
+                    />
                     <span className="font-medium text-foreground">{r.title}</span>
                   </div>
                 </td>
@@ -192,7 +208,10 @@ function AdminProducts() {
 
             <div className="mt-4 grid gap-4">
               <div>
-                <label htmlFor="p-title" className="mb-1 block text-sm font-semibold text-foreground">
+                <label
+                  htmlFor="p-title"
+                  className="mb-1 block text-sm font-semibold text-foreground"
+                >
                   Product name
                 </label>
                 <input
@@ -205,7 +224,10 @@ function AdminProducts() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="p-cat" className="mb-1 block text-sm font-semibold text-foreground">
+                  <label
+                    htmlFor="p-cat"
+                    className="mb-1 block text-sm font-semibold text-foreground"
+                  >
                     Category
                   </label>
                   <select
@@ -222,7 +244,10 @@ function AdminProducts() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="p-price" className="mb-1 block text-sm font-semibold text-foreground">
+                  <label
+                    htmlFor="p-price"
+                    className="mb-1 block text-sm font-semibold text-foreground"
+                  >
                     Price (USD)
                   </label>
                   <input

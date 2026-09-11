@@ -1,11 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
 import { Rating } from "@/components/Rating";
 import { StockBadge } from "@/components/StockBadge";
-import { CATEGORIES, formatPrice, products, type Product } from "@/lib/products";
+import {
+  CATEGORIES,
+  formatPrice,
+  getProductCategories,
+  getProductsPage,
+  type Product,
+} from "@/lib/products";
 import { addToCart } from "@/lib/cart";
 
 type Search = { q?: string | undefined; category?: string | undefined };
@@ -46,25 +52,53 @@ function ProductListing() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [quick, setQuick] = useState<Product | null>(null);
   const [page, setPage] = useState(1);
-
-  const list = useMemo(() => {
-    let out = products.filter(
-      (p) =>
-        p.price <= maxPrice &&
-        p.rating >= minRating &&
-        (!inStockOnly || p.stock !== "out") &&
-        (cats.length === 0 || cats.includes(p.category)) &&
-        (!q || p.title.toLowerCase().includes(q.toLowerCase())),
-    );
-    if (sort === "Price: Low-High") out = [...out].sort((a, b) => a.price - b.price);
-    if (sort === "Newest") out = [...out].reverse();
-    if (sort === "Best Selling") out = [...out].sort((a, b) => b.reviews - a.reviews);
-    return out;
-  }, [maxPrice, minRating, inStockOnly, cats, q, sort]);
-
-  const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const [list, setList] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const currentPage = Math.min(page, pageCount);
-  const paginated = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    void (async () => {
+      try {
+        const categories = await getProductCategories();
+        const categoryId =
+          cats.length === 1
+            ? categories.find((item) => item.name === cats[0] || item.slug === cats[0])?.id
+            : undefined;
+        const productParams = {
+          page: currentPage - 1,
+          size: PAGE_SIZE,
+          maxPrice,
+          sortBy: sort === "Price: Low-High" ? "basePrice" : "createdAt",
+          sortDirection: sort === "Price: Low-High" ? "asc" : "desc",
+          ...(categoryId === undefined ? {} : { categoryId }),
+        };
+        const response = await getProductsPage(productParams);
+        if (!active) return;
+        const query = q?.toLowerCase().trim();
+        const filtered = query
+          ? response.content.filter((item) => item.title.toLowerCase().includes(query))
+          : response.content;
+        setList(inStockOnly ? filtered.filter((item) => item.stock !== "out") : filtered);
+        setTotal(response.totalElements);
+        setPageCount(Math.max(1, response.totalPages));
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : "Unable to load products.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [cats, currentPage, inStockOnly, maxPrice, minRating, q, sort]);
+
+  useEffect(() => setPage(1), [cats, inStockOnly, maxPrice, minRating, q, sort]);
 
   const toggleCat = (c: string) =>
     setCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -75,7 +109,10 @@ function ProductListing() {
         <legend className="mb-3 text-base font-semibold text-foreground">Category</legend>
         <div className="space-y-2">
           {CATEGORIES.map((c) => (
-            <label key={c} className="flex min-h-11 items-center gap-3 text-sm text-muted-foreground">
+            <label
+              key={c}
+              className="flex min-h-11 items-center gap-3 text-sm text-muted-foreground"
+            >
               <input
                 type="checkbox"
                 checked={cats.includes(c)}
@@ -108,7 +145,10 @@ function ProductListing() {
         <legend className="mb-3 text-base font-semibold text-foreground">Rating</legend>
         <div className="space-y-2">
           {[0, 4, 4.5].map((r) => (
-            <label key={r} className="flex min-h-11 items-center gap-3 text-sm text-muted-foreground">
+            <label
+              key={r}
+              className="flex min-h-11 items-center gap-3 text-sm text-muted-foreground"
+            >
               <input
                 type="radio"
                 name="rating"
@@ -139,7 +179,7 @@ function ProductListing() {
       <h1 className="text-3xl font-bold tracking-tight text-foreground">
         {q ? `Results for “${q}”` : cats.length === 1 ? cats[0] : "All products"}
       </h1>
-      <p className="mt-2 text-sm text-muted-foreground">{list.length} products</p>
+      <p className="mt-2 text-sm text-muted-foreground">{total} products</p>
 
       <div className="mt-8 flex flex-col gap-8 lg:flex-row">
         <aside className="hidden w-64 shrink-0 lg:block">{filters}</aside>
@@ -169,23 +209,33 @@ function ProductListing() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            {paginated.map((p) => (
+            {list.map((p) => (
               <ProductCard key={p.id} product={p} onQuickView={setQuick} />
             ))}
           </div>
-          {list.length === 0 && (
+          {loading && (
+            <p className="rounded-xl bg-card p-8 text-center text-base text-muted-foreground">
+              Loading products...
+            </p>
+          )}
+          {error && (
+            <p className="rounded-xl bg-destructive/10 p-8 text-center text-base text-destructive">
+              {error}
+            </p>
+          )}
+          {!loading && !error && list.length === 0 && (
             <p className="rounded-xl bg-card p-8 text-center text-base text-muted-foreground">
               No products match these filters.
             </p>
           )}
-          {list.length > PAGE_SIZE && (
+          {pageCount > 1 && (
             <nav aria-label="Product pages" className="mt-8 flex items-center justify-center gap-3">
               <Button
                 variant="secondary"
                 size="sm"
                 aria-label="Previous page"
                 disabled={currentPage === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setPage((p) => Math.max(1, Math.min(pageCount, p - 1)))}
               >
                 <ChevronLeft />
               </Button>
@@ -222,7 +272,12 @@ function ProductListing() {
               </button>
             </div>
             {filters}
-            <Button variant="primary" size="md" className="mt-8 w-full" onClick={() => setFiltersOpen(false)}>
+            <Button
+              variant="primary"
+              size="md"
+              className="mt-8 w-full"
+              onClick={() => setFiltersOpen(false)}
+            >
               Show {list.length} products
             </Button>
           </div>
@@ -265,7 +320,12 @@ function ProductListing() {
               >
                 Add to Cart
               </Button>
-              <Button variant="tertiary" size="sm" className="mt-2 w-full" onClick={() => setQuick(null)}>
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => setQuick(null)}
+              >
                 Continue shopping
               </Button>
             </div>

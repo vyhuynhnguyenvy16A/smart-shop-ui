@@ -2,13 +2,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Star, Truck, ShieldCheck, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
-import { CATEGORIES, products } from "@/lib/products";
+import { CATEGORIES, getProducts } from "@/lib/products";
 import hero from "@/assets/p-headphones.jpg";
 import sneakers from "@/assets/p-sneakers.jpg";
 import backpack from "@/assets/p-backpack.jpg";
 import watch from "@/assets/p-watch.jpg";
 
 export const Route = createFileRoute("/")({
+  loader: () => getProducts({ page: 0, size: 4 }),
   head: () => ({
     meta: [
       { title: "Northline — Everyday Gear, Free Shipping Over $50" },
@@ -35,7 +36,7 @@ const categoryImages: Record<string, string> = {
 };
 
 function Home() {
-  const featured = products.slice(0, 4);
+  const featured = Route.useLoaderData();
 
   return (
     <>
@@ -52,12 +53,7 @@ function Home() {
               Tested essentials, honest prices, free shipping over $50 and 30-day free returns.
             </p>
             <div className="mt-8">
-              <Button
-                variant="primary"
-                size="md"
-                asChild
-                className="w-full sm:w-auto"
-              >
+              <Button variant="primary" size="md" asChild className="w-full sm:w-auto">
                 <Link to="/products" search={{}}>
                   Shop best sellers
                 </Link>

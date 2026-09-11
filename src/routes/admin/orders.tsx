@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminNav } from "@/components/AdminNav";
-import { ORDERS, ORDER_STATUSES, STATUS_LABEL, StatusBadgeClass, type Order, type OrderStatus } from "@/lib/orders";
+import {
+  getOrderPage,
+  ORDER_STATUSES,
+  STATUS_LABEL,
+  StatusBadgeClass,
+  type Order,
+  type OrderStatus,
+} from "@/lib/orders";
 import { formatPrice } from "@/lib/products";
 
 export const Route = createFileRoute("/admin/orders")({
@@ -10,18 +17,26 @@ export const Route = createFileRoute("/admin/orders")({
       { title: "Order management — Northline Admin" },
       {
         name: "description",
-        content: "Admin table of every Northline order with customer, date, total and an editable status.",
+        content:
+          "Admin table of every Northline order with customer, date, total and an editable status.",
       },
       { property: "og:title", content: "Order management — Northline Admin" },
-      { property: "og:description", content: "Review orders and move them through the fulfilment states." },
+      {
+        property: "og:description",
+        content: "Review orders and move them through the fulfilment states.",
+      },
     ],
   }),
   component: AdminOrders,
 });
 
 function AdminOrders() {
-  const [orders, setOrders] = useState<Order[]>(ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
+
+  useEffect(() => {
+    void getOrderPage().then((page) => setOrders(page.content));
+  }, []);
 
   const rows = filter === "all" ? orders : orders.filter((o) => o.status === filter);
 

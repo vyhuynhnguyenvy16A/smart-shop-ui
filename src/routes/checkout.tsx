@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cartTotals, clearCart, detailedCart, useCart } from "@/lib/cart";
 import { formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
-import { hasAccessToken } from "@/lib/api-client";
+import { createOrder, getApiErrorMessage, hasAccessToken, type ApiError } from "@/lib/api-client";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({
@@ -16,7 +16,10 @@ export const Route = createFileRoute("/checkout")({
         content: "Three-step guest checkout: shipping address, delivery method and secure payment.",
       },
       { property: "og:title", content: "Checkout — Northline" },
-      { property: "og:description", content: "Fast, secure three-step guest checkout at Northline." },
+      {
+        property: "og:description",
+        content: "Fast, secure three-step guest checkout at Northline.",
+      },
     ],
   }),
   component: CheckoutPage,
@@ -60,6 +63,7 @@ function CheckoutPage() {
   const [shipping, setShipping] = useState("standard");
   const [payment, setPayment] = useState("card");
   const [payError, setPayError] = useState("");
+  const [placingOrder, setPlacingOrder] = useState(false);
 
   const shippingCost = SHIPPING_OPTIONS.find((s) => s.id === shipping)?.price ?? 0;
   const tax = Math.round(subtotal * 0.08);
@@ -99,12 +103,7 @@ function CheckoutPage() {
     );
   }
 
-  const field = (
-    key: keyof Fields,
-    label: string,
-    type = "text",
-    className = "",
-  ) => (
+  const field = (key: keyof Fields, label: string, type = "text", className = "") => (
     <div className={className}>
       <label htmlFor={key} className="mb-1 block text-sm font-semibold text-foreground">
         {label}
@@ -249,17 +248,39 @@ function CheckoutPage() {
                   variant="primary"
                   size="md"
                   className="flex-1"
-                  onClick={() => {
+                  onClick={async () => {
+                    if (placingOrder) return;
                     if (items.length === 0) {
                       setPayError("Your cart is empty. Add a product before paying.");
                       return;
                     }
                     setPayError("");
-                    clearCart();
-                    setDone(true);
+                    setPlacingOrder(true);
+                    try {
+                      await createOrder({
+                        shippingRecipientName: fields.fullName.trim(),
+                        shippingPhone: fields.phone.trim(),
+                        shippingAddressLine: fields.address.trim(),
+                        shippingCity: fields.city.trim(),
+                      });
+                      await clearCart();
+                      setDone(true);
+                    } catch (reason) {
+                      const status = (reason as ApiError)?.status;
+                      setPayError(
+                        status === 409
+                          ? "Some items are out of stock or no longer available in that quantity."
+                          : status === 400
+                            ? "Your cart is empty or the shipping details are invalid."
+                            : getApiErrorMessage(reason, "Unable to place your order."),
+                      );
+                    } finally {
+                      setPlacingOrder(false);
+                    }
                   }}
+                  disabled={placingOrder}
                 >
-                  Place order · {formatPrice(total)}
+                  {placingOrder ? "Placing order..." : `Place order · ${formatPrice(total)}`}
                 </Button>
               </div>
             </div>
@@ -282,7 +303,9 @@ function CheckoutPage() {
                 <span className="text-muted-foreground">×{i.qty}</span>
               </li>
             ))}
-            {items.length === 0 && <li className="text-sm text-muted-foreground">Cart is empty.</li>}
+            {items.length === 0 && (
+              <li className="text-sm text-muted-foreground">Cart is empty.</li>
+            )}
           </ul>
           <dl className="mt-6 grid gap-2 border-t border-border pt-4 text-sm">
             <div className="flex justify-between">

@@ -2,10 +2,15 @@ import headphones from "@/assets/p-headphones.jpg";
 import sneakers from "@/assets/p-sneakers.jpg";
 import backpack from "@/assets/p-backpack.jpg";
 import watch from "@/assets/p-watch.jpg";
+import {
+  getCategories,
+  getProductById as fetchProductById,
+  getProductsPage as fetchProductsPage,
+  type CategoryResponse,
+  type ProductResponse,
+} from "./api-client";
 
-export type Product = {
-  id: string;
-  slug: string;
+export type Product = ProductResponse & {
   title: string;
   price: number;
   compareAt?: number;
@@ -15,7 +20,6 @@ export type Product = {
   category: string;
   stock: "in" | "low" | "out";
   badge?: string;
-  description: string;
 };
 
 export const CATEGORIES = [
@@ -28,118 +32,62 @@ export const CATEGORIES = [
   "Deals",
 ] as const;
 
-export const products: Product[] = [
-  {
-    id: "1",
-    slug: "studio-wireless-headphones",
-    title: "Studio Wireless Noise-Cancelling Headphones",
-    price: 249,
-    compareAt: 329,
-    rating: 4.8,
-    reviews: 1284,
-    image: headphones,
-    category: "Audio",
-    stock: "in",
-    badge: "Best Seller",
-    description:
-      "40-hour battery, adaptive noise cancelling and memory-foam ear cushions built for long listening sessions.",
-  },
-  {
-    id: "2",
-    slug: "aero-running-sneakers",
-    title: "Aero Everyday Running Sneakers",
-    price: 119,
-    rating: 4.6,
-    reviews: 842,
-    image: sneakers,
-    category: "Footwear",
-    stock: "low",
-    badge: "Verified Buyer Favourite",
-    description:
-      "Breathable knit upper with a responsive foam midsole that keeps its bounce mile after mile.",
-  },
-  {
-    id: "3",
-    slug: "daily-canvas-backpack",
-    title: "Daily Canvas Commuter Backpack",
-    price: 89,
-    compareAt: 110,
-    rating: 4.7,
-    reviews: 512,
-    image: backpack,
-    category: "Bags",
-    stock: "in",
-    badge: "Eco-Friendly",
-    description:
-      "Water-resistant recycled canvas, padded 16-inch laptop sleeve and a hidden security pocket.",
-  },
-  {
-    id: "4",
-    slug: "minimal-mesh-watch",
-    title: "Minimal Steel Mesh Watch",
-    price: 159,
-    rating: 4.5,
-    reviews: 306,
-    image: watch,
-    category: "Watches",
-    stock: "in",
-    description:
-      "Sapphire crystal, 5 ATM water resistance and a brushed steel mesh band that fits any wrist.",
-  },
-  {
-    id: "5",
-    slug: "studio-headphones-lite",
-    title: "Studio Lite On-Ear Headphones",
-    price: 129,
-    rating: 4.3,
-    reviews: 198,
-    image: headphones,
-    category: "Audio",
-    stock: "out",
-    description: "The lighter Studio, tuned for balanced everyday listening.",
-  },
-  {
-    id: "6",
-    slug: "aero-trail-sneakers",
-    title: "Aero Trail All-Terrain Sneakers",
-    price: 139,
-    compareAt: 169,
-    rating: 4.4,
-    reviews: 271,
-    image: sneakers,
-    category: "Footwear",
-    stock: "in",
-    badge: "Sale",
-    description: "Grippy lugged outsole and a reinforced toe cap for rough ground.",
-  },
-  {
-    id: "7",
-    slug: "canvas-weekender",
-    title: "Canvas Weekender Duffel",
-    price: 129,
-    rating: 4.6,
-    reviews: 143,
-    image: backpack,
-    category: "Bags",
-    stock: "low",
-    description: "Cabin-sized duffel with a shoe compartment and detachable strap.",
-  },
-  {
-    id: "8",
-    slug: "mesh-watch-noir",
-    title: "Mesh Watch Noir Edition",
-    price: 179,
-    rating: 4.9,
-    reviews: 88,
-    image: watch,
-    category: "Watches",
-    stock: "in",
-    badge: "New",
-    description: "Blacked-out case and dial with a matching mesh bracelet.",
-  },
-];
+const categoryImages: Record<string, string> = {
+  audio: headphones,
+  footwear: sneakers,
+  bags: backpack,
+  watches: watch,
+};
 
-export const getProduct = (slug: string) => products.find((p) => p.slug === slug);
+function imageForProduct(product: ProductResponse) {
+  const category = product.categoryName.toLowerCase();
+  return Object.entries(categoryImages).find(([key]) => category.includes(key))?.[1] ?? headphones;
+}
+
+export function adaptProduct(product: ProductResponse): Product {
+  const status = product.status.toLowerCase();
+  return {
+    ...product,
+    title: product.name,
+    price: product.basePrice,
+    rating: 0,
+    reviews: 0,
+    image: imageForProduct(product),
+    category: product.categoryName,
+    stock: status.includes("out") || status.includes("inactive") ? "out" : "in",
+  };
+}
+
+export async function getProductsPage(params?: {
+  page?: number;
+  size?: number;
+  categoryId?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  sortBy?: string;
+  sortDirection?: string;
+}) {
+  const page = await fetchProductsPage(params);
+  return { ...page, content: page.content.map(adaptProduct) };
+}
+
+export async function getProducts(params?: Parameters<typeof getProductsPage>[0]) {
+  const page = await getProductsPage(params);
+  return page.content;
+}
+
+export async function getProductById(id: number) {
+  return adaptProduct(await fetchProductById(id));
+}
+
+export async function getProductBySlug(slug: string) {
+  const page = await getProductsPage({ page: 0, size: 100 });
+  return page.content.find((product) => product.slug === slug);
+}
+
+export async function getProductCategories(): Promise<CategoryResponse[]> {
+  return getCategories();
+}
 
 export const formatPrice = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
