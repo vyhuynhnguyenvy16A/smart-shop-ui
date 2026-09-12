@@ -1,19 +1,30 @@
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-const DEVICE_ID_KEY = "deviceId";
+import { supabase } from "@/integrations/supabase/client";
 
-export type AuthResponse = {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  tokenType: string;
+export type VariantResponse = {
+  id: number;
+  sku: string;
+  color: string;
+  size: string;
+  price: number;
+  stock: number;
 };
 
-export type UserResponse = {
+export type ProductResponse = {
   id: number;
-  email: string;
-  fullName: string;
-  phone: string;
-  role: string;
+  name: string;
+  slug: string;
+  description: string;
+  basePrice: number;
+  compareAtPrice: number | null;
+  status: string;
+  imageKey: string;
+  rating: number;
+  reviewsCount: number;
+  badge: string | null;
+  categoryId: number;
+  categoryName: string;
+  createdAt: string;
+  variants: VariantResponse[];
 };
 
 export type CategoryResponse = {
@@ -23,16 +34,12 @@ export type CategoryResponse = {
   parentId: number | null;
 };
 
-export type ProductResponse = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string;
-  basePrice: number;
-  status: string;
-  categoryId: number;
-  categoryName: string;
-  createdAt: string;
+export type UserResponse = {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  avatarUrl: string | null;
 };
 
 export type PageResponse<T> = {
@@ -50,10 +57,14 @@ export type PageResponse<T> = {
 export type CartItemResponse = {
   id: number;
   variantId: number;
+  productId: number;
+  productSlug: string;
   productName: string;
+  imageKey: string;
   sku: string;
   size: string;
   color: string;
+  stock: number;
   unitPrice: number;
   quantity: number;
   subtotal: number;
@@ -71,6 +82,7 @@ export type OrderItemResponse = {
   skuSnapshot: string;
   sizeSnapshot: string;
   colorSnapshot: string;
+  imageKeySnapshot: string;
   unitPriceSnapshot: number;
   quantity: number;
   subtotal: number;
@@ -84,225 +96,508 @@ export type OrderResponse = {
   shippingPhone: string;
   shippingAddressLine: string;
   shippingCity: string;
+  paymentMethod: string;
   items: OrderItemResponse[];
   createdAt: string;
 };
 
 export type ApiError = Error & { status?: number };
 
-const ACCESS_TOKEN_KEY = "accessToken";
-const REFRESH_TOKEN_KEY = "refreshToken";
-
-export function getAccessToken() {
-  return typeof window === "undefined" ? null : localStorage.getItem(ACCESS_TOKEN_KEY);
-}
-
-export function hasAccessToken() {
-  return Boolean(getAccessToken());
-}
-
-export function saveAuthTokens(auth: AuthResponse) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, auth.accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, auth.refreshToken);
-}
-
-export function clearAuthTokens() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-}
-
-export function getDeviceId() {
-  if (typeof window === "undefined") return "server";
-  const existing = localStorage.getItem(DEVICE_ID_KEY);
-  if (existing) return existing;
-  const deviceId = crypto.randomUUID();
-  localStorage.setItem(DEVICE_ID_KEY, deviceId);
-  return deviceId;
-}
-
 export function getApiErrorMessage(
   error: unknown,
-  fallback = "Something went wrong. Please try again.",
+  fallback = "Đã có lỗi xảy ra. Vui lòng thử lại.",
 ) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }
 
-async function refreshAccessToken() {
-  if (typeof window === "undefined") return false;
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-  if (!refreshToken) return false;
-
-  const response = await fetch(`${API_URL}/api/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-  });
-  if (!response.ok) return false;
-
-  const auth = (await response.json()) as AuthResponse;
-  saveAuthTokens(auth);
-  return true;
+function fail(message: string): never {
+  throw new Error(message) as ApiError;
 }
 
-export async function apiFetch<T>(
-  path: string,
-  options: RequestInit = {},
-  canRefresh = true,
-): Promise<T> {
-  const token = getAccessToken();
-  const headers = new Headers(options.headers);
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+/* ---------------------------------- Auth --------------------------------- */
 
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (response.status === 401 && canRefresh && !path.startsWith("/api/auth/refresh")) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) return apiFetch<T>(path, options, false);
-    clearAuthTokens();
-    if (typeof window !== "undefined" && window.location.pathname !== "/auth") {
-      window.location.assign("/auth");
-    }
-  }
-
-  if (!response.ok) {
-    let message =
-      response.status === 409
-        ? "This item is no longer available in the requested quantity."
-        : response.status === 400
-          ? "Please check the information and try again."
-          : response.status === 403
-            ? "You do not have permission to perform this action."
-            : response.status === 404
-              ? "The requested resource was not found."
-              : "Something went wrong. Please try again.";
-    try {
-      const body = (await response.json()) as { message?: string; detail?: string; title?: string };
-      if (body.message || body.detail)
-        message = body.message ?? body.detail ?? body.title ?? message;
-    } catch {
-      // Keep the friendly status message when the backend does not return JSON.
-    }
-    const error = new Error(message) as ApiError;
-    error.status = response.status;
-    throw error;
-  }
-
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+export async function getSessionUserId() {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
 }
 
-export function getProductsPage(params?: {
-  page?: number;
-  size?: number;
-  categoryId?: number;
-  minPrice?: number;
-  maxPrice?: number;
-  sortBy?: string;
-  sortDirection?: string;
-}) {
-  const search = new URLSearchParams();
-  if (params?.page !== undefined) search.set("page", String(params.page));
-  if (params?.size !== undefined) search.set("size", String(params.size));
-  if (params?.categoryId !== undefined) search.set("categoryId", String(params.categoryId));
-  if (params?.minPrice !== undefined) search.set("minPrice", String(params.minPrice));
-  if (params?.maxPrice !== undefined) search.set("maxPrice", String(params.maxPrice));
-  if (params?.sortBy !== undefined) search.set("sortBy", params.sortBy);
-  if (params?.sortDirection !== undefined) search.set("sortDirection", params.sortDirection);
-  const query = search.toString();
-  return apiFetch<PageResponse<ProductResponse>>(`/api/products${query ? `?${query}` : ""}`);
+async function requireUserId() {
+  const userId = await getSessionUserId();
+  if (!userId) fail("Bạn cần đăng nhập để tiếp tục.");
+  return userId;
 }
 
-export async function getProducts(params?: { page?: number; size?: number; categoryId?: number }) {
-  const page = await getProductsPage(params);
-  return page.content;
-}
-
-export function getProductById(id: number) {
-  return apiFetch<ProductResponse>(`/api/products/${id}`);
-}
-
-export function getCategories() {
-  return apiFetch<CategoryResponse[]>("/api/categories");
-}
-
-export function registerUser(body: {
+export async function registerUser(body: {
   email: string;
   password: string;
   fullName: string;
   phone: string;
 }) {
-  return apiFetch<UserResponse>("/api/auth/register", {
-    method: "POST",
-    body: JSON.stringify(body),
+  const { error } = await supabase.auth.signUp({
+    email: body.email,
+    password: body.password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/login`,
+      data: { full_name: body.fullName, phone: body.phone },
+    },
   });
+  if (error) fail(error.message);
 }
 
-export function loginUser(body: { email: string; password: string }) {
-  return apiFetch<AuthResponse>("/api/auth/login", {
-    method: "POST",
-    headers: { "X-Device-Id": getDeviceId() },
-    body: JSON.stringify(body),
+export async function loginUser(body: { email: string; password: string }) {
+  const { error } = await supabase.auth.signInWithPassword({
+    email: body.email,
+    password: body.password,
   });
+  if (error) fail("Email hoặc mật khẩu không đúng.");
 }
 
-export function logoutUser() {
-  const refreshToken =
-    typeof window === "undefined" ? null : localStorage.getItem(REFRESH_TOKEN_KEY);
-  return apiFetch<void>("/api/auth/logout", {
-    method: "POST",
-    body: JSON.stringify({ refreshToken }),
-  });
+export async function logoutUser() {
+  await supabase.auth.signOut();
 }
 
-export function getCurrentUser() {
-  return apiFetch<UserResponse>("/api/users/me");
+export async function getCurrentUser(): Promise<UserResponse | null> {
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, phone, avatar_url")
+    .eq("id", user.id)
+    .maybeSingle();
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    fullName: profile?.full_name ?? (user.user_metadata["full_name"] as string) ?? "",
+    phone: profile?.phone ?? (user.user_metadata["phone"] as string) ?? "",
+    avatarUrl: profile?.avatar_url ?? null,
+  };
 }
 
-export function getCart() {
-  return apiFetch<CartResponse>("/api/cart");
+export async function updateProfile(body: { fullName: string; phone: string }) {
+  const userId = await requireUserId();
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({ id: userId, full_name: body.fullName, phone: body.phone });
+  if (error) fail(error.message);
 }
 
-export function addCartItem(variantId: number, quantity = 1) {
-  return apiFetch<CartResponse>("/api/cart", {
-    method: "POST",
-    body: JSON.stringify({ variantId, quantity }),
-  });
+/* -------------------------------- Addresses ------------------------------- */
+
+export type AddressResponse = {
+  id: string;
+  label: string;
+  recipientName: string;
+  phone: string;
+  addressLine: string;
+  city: string;
+  isDefault: boolean;
+};
+
+export async function getAddresses(): Promise<AddressResponse[]> {
+  const { data, error } = await supabase
+    .from("addresses")
+    .select("*")
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true });
+  if (error) fail(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    label: row.label,
+    recipientName: row.recipient_name,
+    phone: row.phone,
+    addressLine: row.address_line,
+    city: row.city,
+    isDefault: row.is_default,
+  }));
 }
 
-export function updateCartItem(itemId: number, quantity: number) {
-  return apiFetch<CartResponse>(`/api/cart/${itemId}`, {
-    method: "PUT",
-    body: JSON.stringify({ quantity }),
-  });
+export async function saveAddress(body: {
+  id?: string;
+  label: string;
+  recipientName: string;
+  phone: string;
+  addressLine: string;
+  city: string;
+  isDefault: boolean;
+}) {
+  const userId = await requireUserId();
+  if (body.isDefault) {
+    await supabase.from("addresses").update({ is_default: false }).eq("user_id", userId);
+  }
+  const row = {
+    user_id: userId,
+    label: body.label,
+    recipient_name: body.recipientName,
+    phone: body.phone,
+    address_line: body.addressLine,
+    city: body.city,
+    is_default: body.isDefault,
+  };
+  const { error } = body.id
+    ? await supabase.from("addresses").update(row).eq("id", body.id)
+    : await supabase.from("addresses").insert(row);
+  if (error) fail(error.message);
 }
 
-export function deleteCartItem(itemId: number) {
-  return apiFetch<void>(`/api/cart/${itemId}`, { method: "DELETE" });
+export async function deleteAddress(id: string) {
+  const { error } = await supabase.from("addresses").delete().eq("id", id);
+  if (error) fail(error.message);
 }
 
-export function createOrder(body: {
+/* -------------------------------- Products -------------------------------- */
+
+const PRODUCT_SELECT =
+  "id, name, slug, description, base_price, compare_at_price, status, image_key, rating, reviews_count, badge, category_id, created_at, categories(name), product_variants(id, sku, color, size, price, stock)";
+
+type ProductRow = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  base_price: number;
+  compare_at_price: number | null;
+  status: string;
+  image_key: string;
+  rating: number;
+  reviews_count: number;
+  badge: string | null;
+  category_id: number;
+  created_at: string;
+  categories: { name: string } | null;
+  product_variants: {
+    id: number;
+    sku: string;
+    color: string;
+    size: string;
+    price: number;
+    stock: number;
+  }[];
+};
+
+function mapProduct(row: ProductRow): ProductResponse {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    basePrice: Number(row.base_price),
+    compareAtPrice: row.compare_at_price === null ? null : Number(row.compare_at_price),
+    status: row.status,
+    imageKey: row.image_key,
+    rating: Number(row.rating),
+    reviewsCount: row.reviews_count,
+    badge: row.badge,
+    categoryId: row.category_id,
+    categoryName: row.categories?.name ?? "",
+    createdAt: row.created_at,
+    variants: (row.product_variants ?? [])
+      .map((v) => ({ ...v, price: Number(v.price) }))
+      .sort((a, b) => a.color.localeCompare(b.color) || a.size.localeCompare(b.size)),
+  };
+}
+
+export async function getProductsPage(params?: {
+  page?: number;
+  size?: number;
+  categoryId?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  search?: string;
+  sortBy?: string;
+  sortDirection?: string;
+}): Promise<PageResponse<ProductResponse>> {
+  const page = params?.page ?? 0;
+  const size = params?.size ?? 12;
+  let query = supabase.from("products").select(PRODUCT_SELECT, { count: "exact" });
+  if (params?.categoryId !== undefined) query = query.eq("category_id", params.categoryId);
+  if (params?.minPrice !== undefined) query = query.gte("base_price", params.minPrice);
+  if (params?.maxPrice !== undefined) query = query.lte("base_price", params.maxPrice);
+  if (params?.search) query = query.ilike("name", `%${params.search}%`);
+  const column = params?.sortBy === "basePrice" ? "base_price" : "created_at";
+  query = query.order(column, { ascending: params?.sortDirection !== "desc" });
+  const { data, error, count } = await query.range(page * size, page * size + size - 1);
+  if (error) fail(error.message);
+  const total = count ?? 0;
+  const content = ((data ?? []) as unknown as ProductRow[]).map(mapProduct);
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  return {
+    content,
+    totalElements: total,
+    totalPages,
+    size,
+    number: page,
+    first: page === 0,
+    last: page >= totalPages - 1,
+    numberOfElements: content.length,
+    empty: content.length === 0,
+  };
+}
+
+export async function getProducts(params?: Parameters<typeof getProductsPage>[0]) {
+  return (await getProductsPage(params)).content;
+}
+
+export async function getProductById(id: number) {
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) fail(error.message);
+  return data ? mapProduct(data as unknown as ProductRow) : undefined;
+}
+
+export async function getProductBySlugRaw(slug: string) {
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) fail(error.message);
+  return data ? mapProduct(data as unknown as ProductRow) : undefined;
+}
+
+export async function getCategories(): Promise<CategoryResponse[]> {
+  const { data, error } = await supabase.from("categories").select("*").order("id");
+  if (error) fail(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    parentId: row.parent_id,
+  }));
+}
+
+/* ---------------------------------- Cart ---------------------------------- */
+
+const CART_SELECT =
+  "id, quantity, variant_id, product_variants(id, sku, color, size, price, stock, products(id, name, slug, image_key))";
+
+type CartRow = {
+  id: number;
+  quantity: number;
+  variant_id: number;
+  product_variants: {
+    id: number;
+    sku: string;
+    color: string;
+    size: string;
+    price: number;
+    stock: number;
+    products: { id: number; name: string; slug: string; image_key: string } | null;
+  } | null;
+};
+
+function mapCartRow(row: CartRow): CartItemResponse {
+  const variant = row.product_variants;
+  const price = Number(variant?.price ?? 0);
+  return {
+    id: row.id,
+    variantId: row.variant_id,
+    productId: variant?.products?.id ?? 0,
+    productSlug: variant?.products?.slug ?? "",
+    productName: variant?.products?.name ?? "",
+    imageKey: variant?.products?.image_key ?? "headphones",
+    sku: variant?.sku ?? "",
+    size: variant?.size ?? "",
+    color: variant?.color ?? "",
+    stock: variant?.stock ?? 0,
+    unitPrice: price,
+    quantity: row.quantity,
+    subtotal: price * row.quantity,
+  };
+}
+
+export async function getCart(): Promise<CartResponse> {
+  const userId = await getSessionUserId();
+  if (!userId) return { id: 0, items: [], totalAmount: 0 };
+  const { data, error } = await supabase
+    .from("cart_items")
+    .select(CART_SELECT)
+    .order("created_at", { ascending: true });
+  if (error) fail(error.message);
+  const items = ((data ?? []) as unknown as CartRow[]).map(mapCartRow);
+  return { id: 1, items, totalAmount: items.reduce((sum, item) => sum + item.subtotal, 0) };
+}
+
+export async function addCartItem(variantId: number, quantity = 1) {
+  const userId = await requireUserId();
+  const { data: existing } = await supabase
+    .from("cart_items")
+    .select("id, quantity")
+    .eq("variant_id", variantId)
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase
+      .from("cart_items")
+      .update({ quantity: existing.quantity + quantity })
+      .eq("id", existing.id);
+    if (error) fail(error.message);
+  } else {
+    const { error } = await supabase
+      .from("cart_items")
+      .insert({ user_id: userId, variant_id: variantId, quantity });
+    if (error) fail(error.message);
+  }
+  return getCart();
+}
+
+export async function updateCartItem(itemId: number, quantity: number) {
+  const { error } = await supabase.from("cart_items").update({ quantity }).eq("id", itemId);
+  if (error) fail(error.message);
+  return getCart();
+}
+
+export async function deleteCartItem(itemId: number) {
+  const { error } = await supabase.from("cart_items").delete().eq("id", itemId);
+  if (error) fail(error.message);
+}
+
+/* --------------------------------- Orders --------------------------------- */
+
+const ORDER_SELECT =
+  "id, status, total_amount, shipping_recipient_name, shipping_phone, shipping_address_line, shipping_city, payment_method, created_at, order_items(id, product_name_snapshot, sku_snapshot, size_snapshot, color_snapshot, image_key_snapshot, unit_price_snapshot, quantity)";
+
+type OrderRow = {
+  id: number;
+  status: string;
+  total_amount: number;
+  shipping_recipient_name: string;
+  shipping_phone: string;
+  shipping_address_line: string;
+  shipping_city: string;
+  payment_method: string;
+  created_at: string;
+  order_items: {
+    id: number;
+    product_name_snapshot: string;
+    sku_snapshot: string;
+    size_snapshot: string;
+    color_snapshot: string;
+    image_key_snapshot: string;
+    unit_price_snapshot: number;
+    quantity: number;
+  }[];
+};
+
+function mapOrder(row: OrderRow): OrderResponse {
+  return {
+    id: row.id,
+    status: row.status,
+    totalAmount: Number(row.total_amount),
+    shippingRecipientName: row.shipping_recipient_name,
+    shippingPhone: row.shipping_phone,
+    shippingAddressLine: row.shipping_address_line,
+    shippingCity: row.shipping_city,
+    paymentMethod: row.payment_method,
+    createdAt: row.created_at,
+    items: (row.order_items ?? []).map((item) => ({
+      id: item.id,
+      productNameSnapshot: item.product_name_snapshot,
+      skuSnapshot: item.sku_snapshot,
+      sizeSnapshot: item.size_snapshot,
+      colorSnapshot: item.color_snapshot,
+      imageKeySnapshot: item.image_key_snapshot,
+      unitPriceSnapshot: Number(item.unit_price_snapshot),
+      quantity: item.quantity,
+      subtotal: Number(item.unit_price_snapshot) * item.quantity,
+    })),
+  };
+}
+
+export async function createOrder(body: {
   shippingRecipientName: string;
   shippingPhone: string;
   shippingAddressLine: string;
   shippingCity: string;
+  paymentMethod?: string;
+  shippingFee?: number;
 }) {
-  return apiFetch<OrderResponse>("/api/orders", {
-    method: "POST",
-    headers: { "Idempotency-Key": crypto.randomUUID() },
-    body: JSON.stringify(body),
-  });
+  const userId = await requireUserId();
+  const cart = await getCart();
+  if (cart.items.length === 0) fail("Giỏ hàng của bạn đang trống.");
+  const total = cart.totalAmount + (body.shippingFee ?? 0);
+
+  const { data: order, error } = await supabase
+    .from("orders")
+    .insert({
+      user_id: userId,
+      status: "pending",
+      total_amount: total,
+      shipping_recipient_name: body.shippingRecipientName,
+      shipping_phone: body.shippingPhone,
+      shipping_address_line: body.shippingAddressLine,
+      shipping_city: body.shippingCity,
+      payment_method: body.paymentMethod ?? "cod",
+    })
+    .select("id")
+    .single();
+  if (error || !order) fail(error?.message ?? "Không tạo được đơn hàng.");
+
+  const { error: itemsError } = await supabase.from("order_items").insert(
+    cart.items.map((item) => ({
+      order_id: order.id,
+      variant_id: item.variantId,
+      product_name_snapshot: item.productName,
+      sku_snapshot: item.sku,
+      size_snapshot: item.size,
+      color_snapshot: item.color,
+      image_key_snapshot: item.imageKey,
+      unit_price_snapshot: item.unitPrice,
+      quantity: item.quantity,
+    })),
+  );
+  if (itemsError) fail(itemsError.message);
+
+  await supabase
+    .from("cart_items")
+    .delete()
+    .in(
+      "id",
+      cart.items.map((item) => item.id),
+    );
+
+  return { id: order.id };
 }
 
-export function getOrders(params?: { page?: number; size?: number }) {
-  const search = new URLSearchParams();
-  if (params?.page !== undefined) search.set("page", String(params.page));
-  if (params?.size !== undefined) search.set("size", String(params.size));
-  const query = search.toString();
-  return apiFetch<PageResponse<OrderResponse>>(`/api/orders${query ? `?${query}` : ""}`);
+export async function getOrders(params?: { page?: number; size?: number }) {
+  const page = params?.page ?? 0;
+  const size = params?.size ?? 20;
+  const { data, error, count } = await supabase
+    .from("orders")
+    .select(ORDER_SELECT, { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(page * size, page * size + size - 1);
+  if (error) fail(error.message);
+  const content = ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
+  const total = count ?? content.length;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  return {
+    content,
+    totalElements: total,
+    totalPages,
+    size,
+    number: page,
+    first: page === 0,
+    last: page >= totalPages - 1,
+    numberOfElements: content.length,
+    empty: content.length === 0,
+  } satisfies PageResponse<OrderResponse>;
 }
 
-export function getOrderById(id: number) {
-  return apiFetch<OrderResponse>(`/api/orders/${id}`);
+export async function getOrderById(id: number) {
+  const { data, error } = await supabase
+    .from("orders")
+    .select(ORDER_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) fail(error.message);
+  return data ? mapOrder(data as unknown as OrderRow) : undefined;
+}
+
+export async function cancelOrder(id: number) {
+  const { error } = await supabase.from("orders").update({ status: "cancelled" }).eq("id", id);
+  if (error) fail(error.message);
 }
