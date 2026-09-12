@@ -5,21 +5,32 @@ import watch from "@/assets/p-watch.jpg";
 import {
   getCategories,
   getProductById as fetchProductById,
+  getProductBySlugRaw,
   getProductsPage as fetchProductsPage,
   type CategoryResponse,
   type ProductResponse,
+  type VariantResponse,
 } from "./api-client";
 
-export type Product = ProductResponse & {
+export type Product = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
   title: string;
   price: number;
-  compareAt?: number;
+  compareAt: number | null;
   rating: number;
   reviews: number;
   image: string;
   category: string;
+  categoryId: number;
   stock: "in" | "low" | "out";
-  badge?: string;
+  badge: string | null;
+  variants: VariantResponse[];
+  colors: string[];
+  sizes: string[];
+  createdAt: string;
 };
 
 export const CATEGORIES = [
@@ -32,57 +43,62 @@ export const CATEGORIES = [
   "Deals",
 ] as const;
 
-const categoryImages: Record<string, string> = {
-  audio: headphones,
+export const productImages: Record<string, string> = {
+  headphones,
   footwear: sneakers,
   bags: backpack,
   watches: watch,
 };
 
-function imageForProduct(product: ProductResponse) {
-  const category = product.categoryName.toLowerCase();
-  return Object.entries(categoryImages).find(([key]) => category.includes(key))?.[1] ?? headphones;
+export function imageForKey(key: string | undefined) {
+  return productImages[key ?? "headphones"] ?? headphones;
 }
 
 export function adaptProduct(product: ProductResponse): Product {
-  const status = product.status.toLowerCase();
+  const totalStock = product.variants.reduce((sum, v) => sum + v.stock, 0);
   return {
-    ...product,
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    description: product.description,
     title: product.name,
     price: product.basePrice,
-    rating: 0,
-    reviews: 0,
-    image: imageForProduct(product),
+    compareAt: product.compareAtPrice,
+    rating: product.rating,
+    reviews: product.reviewsCount,
+    image: imageForKey(product.imageKey),
     category: product.categoryName,
-    stock: status.includes("out") || status.includes("inactive") ? "out" : "in",
+    categoryId: product.categoryId,
+    stock: totalStock === 0 ? "out" : totalStock < 15 ? "low" : "in",
+    badge: product.badge,
+    variants: product.variants,
+    colors: [...new Set(product.variants.map((v) => v.color))],
+    sizes: [...new Set(product.variants.map((v) => v.size))],
+    createdAt: product.createdAt,
   };
 }
 
-export async function getProductsPage(params?: {
-  page?: number;
-  size?: number;
-  categoryId?: number;
-  minPrice?: number;
-  maxPrice?: number;
-  sortBy?: string;
-  sortDirection?: string;
-}) {
+export async function getProductsPage(params?: Parameters<typeof fetchProductsPage>[0]) {
   const page = await fetchProductsPage(params);
   return { ...page, content: page.content.map(adaptProduct) };
 }
 
-export async function getProducts(params?: Parameters<typeof getProductsPage>[0]) {
-  const page = await getProductsPage(params);
-  return page.content;
+export async function getProducts(params?: Parameters<typeof fetchProductsPage>[0]) {
+  return (await getProductsPage(params)).content;
 }
 
 export async function getProductById(id: number) {
-  return adaptProduct(await fetchProductById(id));
+  const product = await fetchProductById(id);
+  return product ? adaptProduct(product) : undefined;
 }
 
 export async function getProductBySlug(slug: string) {
-  const page = await getProductsPage({ page: 0, size: 100 });
-  return page.content.find((product) => product.slug === slug);
+  const product = await getProductBySlugRaw(slug);
+  return product ? adaptProduct(product) : undefined;
+}
+
+export function findVariant(product: Product, color: string, size: string) {
+  return product.variants.find((v) => v.color === color && v.size === size);
 }
 
 export async function getProductCategories(): Promise<CategoryResponse[]> {
@@ -93,3 +109,4 @@ export const formatPrice = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 export const FREE_SHIPPING_THRESHOLD = 50;
+export const SHIPPING_FEE = 6;
