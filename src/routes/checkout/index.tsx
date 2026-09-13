@@ -7,7 +7,7 @@ import { formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
 import { createOrder, getApiErrorMessage, hasAccessToken, type ApiError } from "@/lib/api-client";
 
-export const Route = createFileRoute("/checkout")({
+export const Route = createFileRoute("/checkout/")({
   head: () => ({
     meta: [
       { title: "Checkout — Northline" },
