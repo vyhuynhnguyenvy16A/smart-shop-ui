@@ -1,10 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { Minus, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cartTotals, detailedCart, removeFromCart, setQty, useCart } from "@/lib/cart";
 import { FREE_SHIPPING_THRESHOLD, formatPrice } from "@/lib/products";
-import { getApiErrorMessage, hasAccessToken } from "@/lib/api-client";
+import { getApiErrorMessage } from "@/lib/api-client";
+import { useRequireAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
@@ -26,11 +27,9 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const navigate = useNavigate();
+  useRequireAuth();
   const [error, setError] = useState("");
-  useEffect(() => {
-    if (!hasAccessToken()) navigate({ to: "/auth" });
-  }, [navigate]);
+
 
   const items = detailedCart(useCart());
   const { subtotal } = cartTotals(items);

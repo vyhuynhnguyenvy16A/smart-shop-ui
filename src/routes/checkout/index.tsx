@@ -1,11 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { Check, ShieldCheck, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cartTotals, clearCart, detailedCart, useCart } from "@/lib/cart";
 import { formatPrice } from "@/lib/products";
 import { cn } from "@/lib/utils";
-import { createOrder, getApiErrorMessage, hasAccessToken, type ApiError } from "@/lib/api-client";
+import { createOrder, getApiErrorMessage, type ApiError } from "@/lib/api-client";
+import { useRequireAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/checkout/")({
   head: () => ({
@@ -42,10 +43,8 @@ const SHIPPING_OPTIONS = [
 ];
 
 function CheckoutPage() {
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (!hasAccessToken()) navigate({ to: "/auth" });
-  }, [navigate]);
+  useRequireAuth();
+
 
   const items = detailedCart(useCart());
   const { subtotal } = cartTotals(items);
