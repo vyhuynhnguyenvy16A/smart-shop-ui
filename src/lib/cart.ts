@@ -7,7 +7,7 @@ import {
   type CartItemResponse,
   type CartResponse,
 } from "./api-client";
-import type { Product } from "./products";
+import { imageForKey, type Product } from "./products";
 
 export type CartLine = {
   id: string;
@@ -92,22 +92,24 @@ export async function clearCart() {
 
 function productFromCart(item: CartItemResponse): Product {
   return {
-    id: item.variantId,
+    id: item.productId,
     name: item.productName,
-    slug: String(item.variantId),
+    slug: item.productSlug,
     description: "",
-    basePrice: item.unitPrice,
-    status: "ACTIVE",
-    categoryId: 0,
-    categoryName: "",
-    createdAt: "",
     title: item.productName,
     price: item.unitPrice,
+    compareAt: null,
     rating: 0,
     reviews: 0,
-    image: "",
+    image: imageForKey(item.imageKey),
     category: "",
-    stock: "in",
+    categoryId: 0,
+    stock: item.stock === 0 ? "out" : item.stock < 15 ? "low" : "in",
+    badge: null,
+    variants: [],
+    colors: item.color ? [item.color] : [],
+    sizes: item.size ? [item.size] : [],
+    createdAt: "",
   };
 }
 

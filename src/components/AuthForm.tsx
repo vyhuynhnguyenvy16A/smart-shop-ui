@@ -40,7 +40,7 @@ export function AuthForm({ mode, redirect }: { mode: "login" | "register"; redir
           phone: phone.trim(),
         });
         setMessage("Tạo tài khoản thành công. Kiểm tra email rồi đăng nhập.");
-        setTimeout(() => void navigate({ to: "/login", search: {} }), 1200);
+        setTimeout(() => void navigate({ to: "/login", search: { redirect: undefined } }), 1200);
         return;
       }
       await loginUser({ email: email.trim(), password });
@@ -165,7 +165,11 @@ export function AuthForm({ mode, redirect }: { mode: "login" | "register"; redir
               Tạo tài khoản mới
             </Link>
           ) : (
-            <Link to="/login" search={{}} className="font-semibold text-primary hover:underline">
+            <Link
+              to="/login"
+              search={{ redirect: undefined }}
+              className="font-semibold text-primary hover:underline"
+            >
               Tôi đã có tài khoản
             </Link>
           )}
